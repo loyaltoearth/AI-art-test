@@ -111,31 +111,6 @@ SAMPLE_ANSWERS = {
     50: "ai"       # Punk Robot
 }
 
-def center_crop_to_aspect_ratio(image, target_ratio):
-    """Crop image to target aspect ratio from the center"""
-    width, height = image.size
-    current_ratio = width / height
-    if current_ratio > target_ratio:
-        new_width = int(height * target_ratio)
-        left = (width - new_width) // 2
-        return image.crop((left, 0, left + new_width, height))
-    elif current_ratio < target_ratio:
-        new_height = int(width / target_ratio)
-        top = (height - new_height) // 2
-        return image.crop((0, top, width, top + new_height))
-    return image
-
-def load_and_resize_image(image_number, thumbnail_size=None):
-    """Load image and resize it while maintaining aspect ratio"""
-    image_path = os.path.join("images", f"{image_number}.png")
-    img = Image.open(image_path)
-
-    if thumbnail_size is not None:
-        target_ratio = thumbnail_size[0] / thumbnail_size[1]
-        img = center_crop_to_aspect_ratio(img, target_ratio)
-    
-    return img
-
 def calculate_scores(user_answers, correct_answers):
     """Calculate various scoring metrics"""
     total_questions = len(correct_answers)
@@ -161,8 +136,7 @@ def calculate_scores(user_answers, correct_answers):
     }
 
 def show_landing_page():
-    """Display the enhanced landing page"""
-    # Add custom CSS for center alignment and styling
+    """Display the enhanced landing page with attribution"""
     st.markdown("""
         <style>
         .centered {
@@ -182,16 +156,19 @@ def show_landing_page():
             color: #FF4B4B;
             font-weight: bold;
         }
+        .attribution {
+            font-size: 1em;
+            font-style: italic;
+            margin-bottom: 2em;
+            color: #666;
+        }
         </style>
         """, unsafe_allow_html=True)
-
-    # Center column layout
     col1, col2, col3 = st.columns([1,2,1])
     
     with col2:
-        # Title and description
         st.markdown('<div class="centered">', unsafe_allow_html=True)
-        st.markdown('<h1 class="big-title"Welcome to the AI Art Turing Test</h1>', unsafe_allow_html=True)
+        st.markdown('<h1 class="big-title">Welcome to the AI Art Turing Test</h1>', unsafe_allow_html=True)
         
         st.markdown("""
         <div class="description">
@@ -202,17 +179,23 @@ def show_landing_page():
         Ready to begin?
         </div>
         """, unsafe_allow_html=True)
+
+        st.markdown("""
+        <div class="attribution">
+        Based on <a href="https://www.astralcodexten.com/p/ai-art-turing-test" target="_blank" 
+        class="hover:underline">Scott Alexander's AI Art Turing Test</a>. 
+        Unlike the original Google Form, this version scores you automatically
+        </div>
+        """, unsafe_allow_html=True)
         
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Create a container for the button to center it
         button_col1, button_col2, button_col3 = st.columns([1,1,1])
         with button_col2:
             if st.button("Start Test", use_container_width=True):
                 st.session_state.current_question = 1
                 st.session_state.show_quiz = True
                 st.rerun()
-
 def show_question_page(question_number):
     """Display an enhanced question page with improved layout and navigation"""
     st.markdown("""
@@ -334,27 +317,19 @@ def show_question_page(question_number):
 
     # Image display
     try:
-        image = load_and_resize_image(question_number)
         col1, col2, col3 = st.columns([1, 3, 1])
         with col2:
             st.markdown('<div class="image-container">', unsafe_allow_html=True)
-            st.image(image, use_container_width=True)
+            st.image(os.path.join("images", f"{question_number}.png"), use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
     except Exception as e:
         st.error(f"Error loading image: {e}")
 
-    # Navigation and choice buttons in a single row
-    col1, col2, col3, col4, col5 = st.columns([1, 4, 1, 4, 1])
+    # Human + AI Button
+    col1, col2 = st.columns([1, 1])
     
-    # Previous button
-    with col1:
-        if question_number > 1:
-            if st.button("←", key="prev", use_container_width=True):
-                st.session_state.current_question -= 1
-                st.rerun()
-
     # Human button
-    with col2:
+    with col1:
         current_answer = st.session_state.user_answers.get(question_number, None)
         human_selected = current_answer == "human"
         if st.button("Human", key="human", use_container_width=True,
@@ -365,7 +340,7 @@ def show_question_page(question_number):
             st.rerun()
 
     # AI button
-    with col4:
+    with col2:
         ai_selected = current_answer == "ai"
         if st.button("AI", key="ai", use_container_width=True,
                     type="primary" if ai_selected else "secondary"):
@@ -373,10 +348,19 @@ def show_question_page(question_number):
             if question_number < 50:
                 st.session_state.current_question += 1
             st.rerun()
+    # Other buttons
+    col1, col2, col3 = st.columns([1, 3, 1])
+
+    # Previous button
+    with col1:
+        if question_number > 1:
+            if st.button("←", key="prev", use_container_width=True):
+                st.session_state.current_question -= 1
+                st.rerun()
 
     # Next button
-    with col5:
-        if question_number < 50:
+    with col3:
+        if question_number < 50 and len(st.session_state.user_answers) >= st.session_state.current_question:
             if st.button("→", key="next", use_container_width=True):
                 st.session_state.current_question += 1
                 st.rerun()
@@ -445,7 +429,6 @@ def show_results_page():
     st.title("🎯 Quiz Results")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Calculate scores
     scores = calculate_scores(st.session_state.user_answers, SAMPLE_ANSWERS)
     
     # Display metrics
@@ -485,7 +468,7 @@ def show_results_page():
         image_data = json.load(f)
     
     show_masonry_grid(
-        images=list(range(1, 51)),  # Image numbers 1-50
+        images=list(range(1, 51)),  
         titles=SAMPLE_TITLES,
         answers=SAMPLE_ANSWERS,
         user_answers=st.session_state.user_answers,
@@ -506,7 +489,6 @@ def show_results_page():
 def main():
     st.set_page_config(page_title="AI Art Turing Test", layout="wide")
     
-    # Initialize session state
     if 'current_question' not in st.session_state:
         st.session_state.current_question = 1
     if 'user_answers' not in st.session_state:
@@ -516,7 +498,6 @@ def main():
     if 'show_quiz' not in st.session_state:
         st.session_state.show_quiz = False
 
-    # Show appropriate page based on state
     if not st.session_state.show_quiz and not st.session_state.quiz_complete:
         show_landing_page()
     elif not st.session_state.quiz_complete:
